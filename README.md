@@ -35,3 +35,13 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 # filipino-food-finder
+
+# future works
+Map view should have search bar and results filter function
+alternative list view should be available for those that don't prefer map view
+there should be a view all shops feature with options to filter by cuisine, location, keywords, etc (similar to property guru)
+http://localhost:3000/my-business - there should be a cancel changes button
+
+# bugs
+A dropdown list of Google Maps suggestions does not appear. walk me through how to debug this
+clicking on website in map pin leads to http://localhost:3000/kocinadepinay.com instead of kocinadepinay.com

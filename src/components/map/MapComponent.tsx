@@ -1,4 +1,3 @@
-// src/components/map/MapComponent.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,6 +8,12 @@ import { Navigation, Star, Heart, ExternalLink } from "lucide-react";
 import ReviewModal from "@/components/ui/ReviewModal";
 import ReviewsListModal from "@/components/ui/ReviewsListModal";
 import { useAuth } from "@/context/AuthContext";
+
+// Helper to ensure links work (Fixes links without https://)
+const ensureUrl = (url?: string) => {
+  if (!url) return "";
+  return url.startsWith("http") ? url : `https://${url}`;
+};
 
 function MapUpdater({ center, zoom }: { center: { lat: number, lng: number }, zoom: number }) {
   const map = useMap();
@@ -26,7 +31,6 @@ export default function MapComponent() {
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   
-  // Geolocation State
   const [center, setCenter] = useState({ lat: 1.3521, lng: 103.8198 });
   const [zoom, setZoom] = useState(11);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
@@ -37,20 +41,16 @@ export default function MapComponent() {
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
 
-  // Initial Data Load
   useEffect(() => {
     getStores(query).then(setStores);
   }, [query]);
 
-  // Initial Geolocation (Auto-run once)
+  // Initial Geolocation
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
           const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           setUserLocation(loc);
-          // Optional: Auto-center on load. Remove if annoying.
-          // setCenter(loc); 
-          // setZoom(14);
       });
     }
   }, []);
@@ -63,8 +63,6 @@ export default function MapComponent() {
         setCenter(loc);
         setZoom(15);
       }, (err) => alert("Could not get location"));
-    } else {
-      alert("Geolocation not supported");
     }
   };
 
@@ -93,6 +91,7 @@ export default function MapComponent() {
                     
                     <span className="text-[10px] font-bold text-center leading-tight px-1 w-full truncate">{store.name}</span>
                     
+                    {/* RESTORED: Keywords on Pin */}
                     {store.keywords && store.keywords[0] && (
                        <span className="text-[9px] text-gray-500 truncate w-full text-center">{store.keywords[0]}</span>
                     )}
@@ -116,10 +115,11 @@ export default function MapComponent() {
               <div className="p-2 min-w-[240px] max-w-[260px]">
                 {selectedStore.imageUrl && <img src={selectedStore.imageUrl} className="w-full h-24 object-cover rounded mb-2" />}
                 
+                {/* Social Links Fixed with ensureUrl */}
                 <div className="flex gap-2 mb-2 flex-wrap">
-                   {selectedStore.facebookUrl && <a href={selectedStore.facebookUrl} target="_blank" className="text-blue-600 text-xs hover:underline">Facebook</a>}
-                   {selectedStore.instagramUrl && <a href={selectedStore.instagramUrl} target="_blank" className="text-pink-600 text-xs hover:underline">Instagram</a>}
-                   {selectedStore.websiteUrl && <a href={selectedStore.websiteUrl} target="_blank" className="text-gray-600 text-xs hover:underline"><ExternalLink size={12} className="inline"/> Web</a>}
+                   {selectedStore.facebookUrl && <a href={ensureUrl(selectedStore.facebookUrl)} target="_blank" className="text-blue-600 text-xs hover:underline">Facebook</a>}
+                   {selectedStore.instagramUrl && <a href={ensureUrl(selectedStore.instagramUrl)} target="_blank" className="text-pink-600 text-xs hover:underline">Instagram</a>}
+                   {selectedStore.websiteUrl && <a href={ensureUrl(selectedStore.websiteUrl)} target="_blank" className="text-gray-600 text-xs hover:underline"><ExternalLink size={12} className="inline"/> Web</a>}
                 </div>
 
                 {selectedStore.menuUrl ? (

@@ -3,12 +3,18 @@
 import { useAuth } from "@/context/AuthContext";
 import { useState, useEffect } from "react";
 import { updateUserProfile } from "@/lib/db";
-import { Loader2 } from "lucide-react";
+import { Loader2, Camera, Lock } from "lucide-react";
+import { updatePassword, updateProfile } from "firebase/auth";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth } from "@/lib/firebase";
 
 export default function ProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
   const [formData, setFormData] = useState({ firstName: "", lastName: "", phoneNumber: "" });
   const [loading, setLoading] = useState(false);
+  
+  const [newPassword, setNewPassword] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (profile) {
@@ -25,12 +31,34 @@ export default function ProfilePage() {
     if (!user) return;
     setLoading(true);
     try {
+      let photoURL = user.photoURL;
+
+      // 1. Upload new image if selected
+      if (imageFile) {
+        const storage = getStorage();
+        const fileRef = ref(storage, `users/${user.uid}/profile_${Date.now()}`);
+        await uploadBytes(fileRef, imageFile);
+        photoURL = await getDownloadURL(fileRef);
+        // Update Firebase Auth Profile
+        await updateProfile(user, { photoURL });
+      }
+
+      // 2. Update Firestore Data
       await updateUserProfile(user.uid, formData);
+
+      // 3. Update Password if provided
+      if (newPassword) {
+        if (newPassword.length < 6) throw new Error("Password must be 6+ chars");
+        await updatePassword(user, newPassword);
+        setNewPassword(""); // Clear
+        alert("Password updated!");
+      }
+
       await refreshProfile();
-      alert("Profile updated successfully!");
-    } catch (e) {
+      alert("Profile saved successfully!");
+    } catch (e: any) {
       console.error(e);
-      alert("Error updating profile");
+      alert("Error: " + e.message + " (If changing password, try re-logging in first)");
     } finally {
       setLoading(false);
     }
@@ -41,13 +69,27 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-sm">
-        <div className="flex items-center gap-4 mb-6">
-           {user.photoURL ? <img src={user.photoURL} className="w-16 h-16 rounded-full border" /> : <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-2xl font-bold text-blue-600">{user.displayName?.[0]}</div>}
-           <div>
-             <h1 className="text-2xl font-bold">{user.displayName || "My Profile"}</h1>
-             <p className="text-gray-500 text-sm">{user.email}</p>
-             <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded uppercase font-bold">{profile?.role || "User"}</span>
+        
+        {/* Profile Header & Image Upload */}
+        <div className="flex flex-col items-center mb-8">
+           <div className="relative group">
+             {imageFile ? (
+               <img src={URL.createObjectURL(imageFile)} className="w-24 h-24 rounded-full object-cover border-2 border-blue-500" />
+             ) : user.photoURL ? (
+               <img src={user.photoURL} className="w-24 h-24 rounded-full object-cover border-2 border-gray-200" />
+             ) : (
+               <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center text-3xl font-bold text-blue-600">{user.displayName?.[0] || "U"}</div>
+             )}
+             
+             <label className="absolute bottom-0 right-0 bg-white p-1.5 rounded-full shadow border cursor-pointer hover:bg-gray-100">
+               <Camera size={16} className="text-gray-600"/>
+               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && setImageFile(e.target.files[0])} />
+             </label>
            </div>
+           
+           <h1 className="text-xl font-bold mt-2">{user.displayName || "My Profile"}</h1>
+           <p className="text-gray-500 text-sm">{user.email}</p>
+           <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded uppercase font-bold mt-1">{profile?.role || "User"}</span>
         </div>
 
         <form onSubmit={handleSave} className="space-y-4">
@@ -65,7 +107,15 @@ export default function ProfilePage() {
              <label className="block text-sm font-bold mb-1">Phone Number</label>
              <input required type="tel" value={formData.phoneNumber} onChange={e => setFormData({...formData, phoneNumber: e.target.value})} className="w-full border p-2 rounded" />
           </div>
-          <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold flex justify-center">
+
+          <hr className="my-4 border-gray-200" />
+          
+          <div>
+             <label className="block text-sm font-bold mb-1 flex items-center gap-1"><Lock size={14}/> Change Password (Optional)</label>
+             <input type="password" placeholder="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full border p-2 rounded bg-gray-50 focus:bg-white transition-colors" />
+          </div>
+
+          <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold flex justify-center mt-4">
             {loading ? <Loader2 className="animate-spin" /> : "Save Changes"}
           </button>
         </form>

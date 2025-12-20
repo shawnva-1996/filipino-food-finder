@@ -1,12 +1,12 @@
 // src/app/login/page.tsx
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { auth } from "@/lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const { loginGoogle, user } = useAuth();
@@ -14,18 +14,21 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
-  if (user) router.push("/"); 
+  // Fix: Move redirect to useEffect to avoid render-time updates
+  useEffect(() => {
+    if (user) router.push("/"); 
+  }, [user, router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/");
+      // Router push handled by useEffect
     } catch (err: any) {
       alert("Login failed: " + err.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -42,7 +45,22 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
-            <input required type="password" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={password} onChange={e => setPassword(e.target.value)} />
+            <div className="relative">
+              <input 
+                required 
+                type={showPassword ? "text" : "password"} 
+                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none pr-10" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-2.5 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
             <div className="text-right mt-1">
               <Link href="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot Password?</Link>
             </div>

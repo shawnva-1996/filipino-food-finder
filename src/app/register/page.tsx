@@ -6,7 +6,7 @@ import { createUserWithEmailAndPassword, sendEmailVerification, GoogleAuthProvid
 import { updateUserProfile } from "@/lib/db";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, X } from "lucide-react";
+import { Check, X, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"user" | "business">("user");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   // Password Strength State
   const [strength, setStrength] = useState(0);
@@ -43,7 +44,6 @@ export default function RegisterPage() {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      // Create profile with selected role
       await updateUserProfile(result.user.uid, {
         uid: result.user.uid,
         email: result.user.email!,
@@ -62,7 +62,7 @@ export default function RegisterPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (strength < 2) return; // Enforce at least medium complexity
+    if (strength < 2) return;
     setLoading(true);
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -123,7 +123,22 @@ export default function RegisterPage() {
           </div>
           <div>
              <label className="block text-sm font-medium mb-1">Password</label>
-             <input required type="password" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={password} onChange={e => setPassword(e.target.value)} />
+             <div className="relative">
+               <input 
+                  required 
+                  type={showPassword ? "text" : "password"} 
+                  className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none pr-10" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+               />
+               <button 
+                  type="button" 
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-2.5 text-gray-500 hover:text-gray-700"
+               >
+                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+               </button>
+             </div>
              
              {/* Complexity Bar */}
              <div className="flex gap-1 mt-2 h-1">
@@ -139,7 +154,7 @@ export default function RegisterPage() {
           </div>
 
           <button disabled={loading || strength < 2} className="w-full bg-blue-600 text-white py-3 rounded font-bold disabled:opacity-50 disabled:cursor-not-allowed">
-            {loading ? "Creating..." : "Create Account"}
+            {loading ? <Loader2 className="animate-spin" /> : "Create Account"}
           </button>
         </form>
 
