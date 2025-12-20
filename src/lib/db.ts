@@ -28,6 +28,7 @@ export interface Store {
   imageUrl?: string;
   views?: number;
   whatsappClicks?: number; // New metric
+  isFeatured?: boolean;
   // New Social Links
   websiteUrl?: string;
   tiktokUrl?: string;
