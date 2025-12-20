@@ -36,12 +36,29 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 # filipino-food-finder
 
+# Feature Updates
+store cards/store pins, when clicked, should bring user to a page showing 
+
+http://localhost:3000/my-business 
+there should be a cancel changes button
+business users should be able to upload multiple images of the food they have on offer, lable it with a name and price tag
+
+http://localhost:3000/ - featured cravings should be changed to links to featured tiktoks
+
+when users pay, they should pay to filipino food finder first, filipino food finder earns its cut, then business owner is paid
+
+ensure the design is mobile friendly and able to be accessed on multiple browsers
+
 # future works
-Map view should have search bar and results filter function
-alternative list view should be available for those that don't prefer map view
-there should be a view all shops feature with options to filter by cuisine, location, keywords, etc (similar to property guru)
-http://localhost:3000/my-business - there should be a cancel changes button
+
+shop feature for users to purchase filipino products and ingredients directly from the store 
 
 # bugs
-A dropdown list of Google Maps suggestions does not appear. walk me through how to debug this
-clicking on website in map pin leads to http://localhost:3000/kocinadepinay.com instead of kocinadepinay.com
+Change support@filipinofoodfinder.sg to shawn@vizalliance.com.sg
+
+after registering, Application Submitted! modal cannot be dismissed, button cannot be pressed
+
+# prompt
+when emitting codes, emit the full code so I can easily copy and paste    
+
+to ensure no features are lost between every iteration, only emit the code file by file, emitting the full, corrected code with ALL features each time

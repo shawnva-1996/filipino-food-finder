@@ -7,8 +7,9 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
-import { Loader2, ImagePlus, CheckCircle } from "lucide-react";
+import { Loader2, ImagePlus, CheckCircle, Trash2, Plus } from "lucide-react";
 import { APIProvider, useMapsLibrary } from "@vis.gl/react-google-maps";
+import { MenuItem } from "@/lib/db";
 
 interface Props {
   initialData?: any;
@@ -18,13 +19,14 @@ interface Props {
 const DEFAULT_FORM = {
   name: "", address: "", category: "Restaurant", description: "", contactNumber: "",
   priceRange: "$", region: "General", isHalal: false, keywordsString: "",
-  menuUrl: "", imageUrl: "", menuText: "",
-  websiteUrl: "", tiktokUrl: "", facebookUrl: "", instagramUrl: ""
+  menuUrl: "", imageUrl: "", 
+  websiteUrl: "", tiktokUrl: "", facebookUrl: "", instagramUrl: "",
+  nearestMrt: "", walkingTime: ""
 };
 
-// Internal component to handle the Google Maps Logic
+// Address Autocomplete Component
 function AddressInput({ address, setAddress, setVerifiedLocation }: any) {
-  const placesLib = useMapsLibrary('places'); // Hook to ensure library is loaded
+  const placesLib = useMapsLibrary('places');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -68,11 +70,18 @@ export default function BusinessForm({ initialData, storeId }: Props) {
   
   const [verifiedLocation, setVerifiedLocation] = useState<{lat: number, lng: number} | null>(null);
 
+  // Files
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [menuImageFile, setMenuImageFile] = useState<File | null>(null);
-  const [menuType, setMenuType] = useState<"text" | "image">("text");
-
+  const [foodImageFiles, setFoodImageFiles] = useState<File[]>([]);
+  
+  // Data State
   const [formData, setFormData] = useState(DEFAULT_FORM);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [existingFoodImages, setExistingFoodImages] = useState<string[]>([]);
+
+  // Menu Builder State
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState("");
 
   useEffect(() => {
     if (initialData) {
@@ -82,13 +91,28 @@ export default function BusinessForm({ initialData, storeId }: Props) {
       if (initialData.lat && initialData.lng) {
         setVerifiedLocation({ lat: initialData.lat, lng: initialData.lng });
       }
-      if (initialData.menuUrl) setMenuType("image");
-      else if (initialData.menuText) setMenuType("text");
+      if (initialData.menuItems) setMenuItems(initialData.menuItems);
+      if (initialData.foodImages) setExistingFoodImages(initialData.foodImages);
     } else {
       setFormData(DEFAULT_FORM);
       setVerifiedLocation(null);
     }
   }, [initialData]);
+
+  const addMenuItem = () => {
+    if (!newItemName || !newItemPrice) return alert("Enter item name and price");
+    setMenuItems([...menuItems, { name: newItemName, price: parseFloat(newItemPrice) }]);
+    setNewItemName("");
+    setNewItemPrice("");
+  };
+
+  const removeMenuItem = (index: number) => {
+    setMenuItems(menuItems.filter((_, i) => i !== index));
+  };
+
+  const handleCancel = () => {
+    if(confirm("Discard changes?")) router.back();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,42 +122,39 @@ export default function BusinessForm({ initialData, storeId }: Props) {
     try {
       const storage = getStorage();
       
+      // 1. Upload Main Cover
       let finalImageUrl = formData.imageUrl;
       if (imageFile) {
-        const storageRef = ref(storage, `stores/${user.uid}/cover_${Date.now()}`);
-        await uploadBytes(storageRef, imageFile);
-        finalImageUrl = await getDownloadURL(storageRef);
+        const ref1 = ref(storage, `stores/${user.uid}/cover_${Date.now()}`);
+        await uploadBytes(ref1, imageFile);
+        finalImageUrl = await getDownloadURL(ref1);
       }
 
-      let finalMenuUrl = formData.menuUrl;
-      if (menuType === "image" && menuImageFile) {
-        const menuRef = ref(storage, `stores/${user.uid}/menu_${Date.now()}`);
-        await uploadBytes(menuRef, menuImageFile);
-        finalMenuUrl = await getDownloadURL(menuRef);
+      // 2. Upload Gallery Images
+      const newFoodUrls = [];
+      for (const file of foodImageFiles) {
+        const ref2 = ref(storage, `stores/${user.uid}/food_${Date.now()}_${file.name}`);
+        await uploadBytes(ref2, file);
+        const url = await getDownloadURL(ref2);
+        newFoodUrls.push(url);
       }
+      const finalFoodImages = [...existingFoodImages, ...newFoodUrls];
 
       const keywords = formData.keywordsString.split(",").map((k: string) => k.trim()).filter((k: string) => k.length > 0);
       
       const dataToSave = {
-        name: formData.name,
-        address: formData.address,
-        category: formData.category,
-        description: formData.description,
-        contactNumber: formData.contactNumber,
-        priceRange: formData.priceRange,
-        region: formData.region,
-        isHalal: formData.isHalal,
-        websiteUrl: formData.websiteUrl || "",
-        facebookUrl: formData.facebookUrl || "",
-        instagramUrl: formData.instagramUrl || "",
-        tiktokUrl: formData.tiktokUrl || "",
-        menuUrl: menuType === "image" ? (finalMenuUrl || "") : "",
-        menuText: menuType === "text" ? formData.menuText : "",
+        ...formData,
         imageUrl: finalImageUrl || "",
+        foodImages: finalFoodImages,
+        menuItems,
         keywords,
         lat: verifiedLocation.lat,
-        lng: verifiedLocation.lng
+        lng: verifiedLocation.lng,
+        lastUpdated: serverTimestamp()
       };
+
+      // Remove temp fields
+      delete (dataToSave as any).keywordsString;
 
       if (storeId) {
         await updateDoc(doc(db, "stores", storeId), dataToSave);
@@ -180,79 +201,124 @@ export default function BusinessForm({ initialData, storeId }: Props) {
 
   return (
     <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ""} libraries={['places']}>
-      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-        <h2 className="text-xl font-bold mb-4">{storeId ? "Edit Business" : "Register New Business"}</h2>
+      <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex justify-between items-center border-b pb-4">
+           <h2 className="text-xl font-bold text-gray-900">{storeId ? "Edit Business" : "Register New Business"}</h2>
+           <button type="button" onClick={handleCancel} className="text-red-600 text-sm hover:underline">Cancel Changes</button>
+        </div>
 
-        <div className="mb-4">
-           <label className="block text-sm font-medium mb-1">Store Photo</label>
-           <div className="flex items-center gap-4">
-             {formData.imageUrl && <img src={formData.imageUrl} className="w-16 h-16 rounded object-cover" alt="Current" />}
-             <label className="cursor-pointer bg-gray-100 px-4 py-2 rounded flex items-center gap-2 hover:bg-gray-200">
-               <ImagePlus size={20} />
-               {imageFile ? "Selected: " + imageFile.name : "Upload Photo"}
-               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && setImageFile(e.target.files[0])} />
-             </label>
+        {/* --- MAIN INFO --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <div>
+              <label className="block text-sm font-bold mb-2">Business Name</label>
+              <input required className="w-full border p-2 rounded" placeholder="e.g. Kabayan Kitchen" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} />
+           </div>
+           <div>
+              <label className="block text-sm font-bold mb-2">Contact Number</label>
+              <input required className="w-full border p-2 rounded" placeholder="+65 9123 4567" value={formData.contactNumber} onChange={e=>setFormData({...formData, contactNumber: e.target.value})} />
            </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <input required className="border p-2 rounded" placeholder="Business Name" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} />
-          <input required className="border p-2 rounded" placeholder="Contact (+65...)" value={formData.contactNumber} onChange={e=>setFormData({...formData, contactNumber: e.target.value})} />
-        </div>
-
         <div>
-            <label className="block text-sm font-medium mb-1">Address (Start typing to search)</label>
+            <label className="block text-sm font-bold mb-2">Address (Type to Search)</label>
             <AddressInput 
               address={formData.address} 
               setAddress={(val: string) => setFormData(prev => ({...prev, address: val}))} 
               setVerifiedLocation={setVerifiedLocation}
             />
-            {verifiedLocation && <p className="text-green-600 text-xs mt-1">✓ Location Verified</p>}
+            {verifiedLocation && <p className="text-green-600 text-xs mt-1 font-bold">✓ Location Verified</p>}
         </div>
 
-        {/* MENU SECTION */}
-        <div className="border p-4 rounded-lg bg-gray-50">
-          <label className="block text-sm font-bold mb-2">Menu Format</label>
-          <div className="flex gap-4 mb-3">
-            <button type="button" onClick={() => setMenuType("text")} className={`px-4 py-2 rounded text-sm ${menuType === "text" ? "bg-blue-600 text-white" : "bg-white border"}`}>Text List</button>
-            <button type="button" onClick={() => setMenuType("image")} className={`px-4 py-2 rounded text-sm ${menuType === "image" ? "bg-blue-600 text-white" : "bg-white border"}`}>Image Upload</button>
-          </div>
+        <div className="grid grid-cols-2 gap-6">
+           <div>
+              <label className="block text-sm font-bold mb-2">Nearest MRT Station</label>
+              <input className="w-full border p-2 rounded" placeholder="e.g. Toa Payoh" value={formData.nearestMrt} onChange={e=>setFormData({...formData, nearestMrt: e.target.value})} />
+           </div>
+           <div>
+              <label className="block text-sm font-bold mb-2">Walking Time</label>
+              <input className="w-full border p-2 rounded" placeholder="e.g. 10 mins" value={formData.walkingTime} onChange={e=>setFormData({...formData, walkingTime: e.target.value})} />
+           </div>
+        </div>
 
-          {menuType === "text" ? (
-            <textarea className="w-full border p-2 rounded" rows={4} placeholder="e.g. Lechon - $15, Sinigang - $10" value={formData.menuText} onChange={e=>setFormData({...formData, menuText: e.target.value})} />
-          ) : (
-            <div className="flex items-center gap-4">
-               {formData.menuUrl && <img src={formData.menuUrl} className="h-20 w-auto border rounded" />}
-               <label className="cursor-pointer bg-white border px-4 py-2 rounded flex items-center gap-2 hover:bg-gray-100">
-                 <ImagePlus size={20} />
-                 {menuImageFile ? "File: " + menuImageFile.name : "Upload Menu Image"}
-                 <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && setMenuImageFile(e.target.files[0])} />
-               </label>
-            </div>
-          )}
+        {/* --- IMAGES --- */}
+        <div>
+           <label className="block text-sm font-bold mb-2">Cover Image (Required)</label>
+           <div className="flex items-center gap-4 mb-4">
+             {formData.imageUrl && <img src={formData.imageUrl} className="w-20 h-20 rounded object-cover border" alt="Cover" />}
+             <label className="cursor-pointer bg-gray-100 px-4 py-2 rounded flex items-center gap-2 hover:bg-gray-200">
+               <ImagePlus size={20} /> Change Cover
+               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && setImageFile(e.target.files[0])} />
+             </label>
+           </div>
+
+           <label className="block text-sm font-bold mb-2">Food Gallery (Carousel)</label>
+           <div className="flex gap-2 overflow-x-auto pb-2">
+              {existingFoodImages.map((url, i) => (
+                <div key={i} className="relative flex-shrink-0">
+                   <img src={url} className="w-20 h-20 rounded object-cover border" />
+                   <button type="button" onClick={() => setExistingFoodImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-0 right-0 bg-red-600 text-white rounded-full p-0.5"><Trash2 size={12}/></button>
+                </div>
+              ))}
+              <label className="w-20 h-20 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 flex-shrink-0">
+                 <Plus size={24} className="text-gray-400" />
+                 <span className="text-[10px] text-gray-500">Add Photos</span>
+                 <input type="file" multiple accept="image/*" className="hidden" onChange={e => e.target.files && setFoodImageFiles(Array.from(e.target.files))} />
+              </label>
+           </div>
+           {foodImageFiles.length > 0 && <p className="text-xs text-blue-600 mt-1">{foodImageFiles.length} new files selected</p>}
+        </div>
+
+        {/* --- MENU BUILDER --- */}
+        <div className="border p-4 rounded-xl bg-gray-50">
+           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">Menu Builder <span className="text-xs font-normal text-gray-500">(Required for "From $X" display)</span></h3>
+           
+           <div className="flex gap-2 mb-4">
+              <input className="flex-grow border p-2 rounded" placeholder="Item Name (e.g. Chicken Rice)" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
+              <input type="number" className="w-24 border p-2 rounded" placeholder="Price $" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} />
+              <button type="button" onClick={addMenuItem} className="bg-blue-600 text-white px-4 rounded font-bold">Add</button>
+           </div>
+
+           <div className="space-y-2">
+              {menuItems.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border shadow-sm">
+                   <span className="font-medium">{item.name}</span>
+                   <div className="flex items-center gap-4">
+                      <span className="text-green-600 font-bold">${item.price.toFixed(2)}</span>
+                      <button type="button" onClick={() => removeMenuItem(idx)} className="text-red-500 hover:text-red-700"><Trash2 size={16}/></button>
+                   </div>
+                </div>
+              ))}
+              {menuItems.length === 0 && <p className="text-center text-gray-400 text-sm">No items added yet.</p>}
+           </div>
         </div>
 
         <h3 className="font-bold text-sm mt-4">Social Media (Optional)</h3>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-4">
           <input className="border p-2 rounded" placeholder="Website URL" value={formData.websiteUrl} onChange={e=>setFormData({...formData, websiteUrl: e.target.value})} />
           <input className="border p-2 rounded" placeholder="Facebook URL" value={formData.facebookUrl} onChange={e=>setFormData({...formData, facebookUrl: e.target.value})} />
           <input className="border p-2 rounded" placeholder="Instagram URL" value={formData.instagramUrl} onChange={e=>setFormData({...formData, instagramUrl: e.target.value})} />
           <input className="border p-2 rounded" placeholder="TikTok URL" value={formData.tiktokUrl} onChange={e=>setFormData({...formData, tiktokUrl: e.target.value})} />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mt-4">
-          <select className="border p-2 rounded" value={formData.priceRange} onChange={e=>setFormData({...formData, priceRange: e.target.value})}>
-             <option value="$">$</option><option value="$$">$$</option><option value="$$$">$$$</option>
-          </select>
-          <select className="border p-2 rounded" value={formData.region} onChange={e=>setFormData({...formData, region: e.target.value})}>
-             <option value="General">General</option><option value="Kapampangan">Kapampangan</option><option value="Ilocano">Ilocano</option><option value="Bisaya">Bisaya</option><option value="Bicolano">Bicolano</option><option value="Tagalog">Tagalog</option>
-          </select>
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div>
+             <label className="block text-sm font-bold mb-1">Cuisine Region</label>
+             <select className="w-full border p-2 rounded" value={formData.region} onChange={e=>setFormData({...formData, region: e.target.value})}>
+                <option value="General">General</option><option value="Kapampangan">Kapampangan</option><option value="Ilocano">Ilocano</option><option value="Bisaya">Bisaya</option><option value="Bicolano">Bicolano</option><option value="Tagalog">Tagalog</option>
+             </select>
+          </div>
+          <div>
+             <label className="block text-sm font-bold mb-1">Keywords</label>
+             <input className="w-full border p-2 rounded" placeholder="e.g. Sisig, Lechon" value={formData.keywordsString} onChange={e=>setFormData({...formData, keywordsString: e.target.value})} />
+          </div>
         </div>
 
-        <input className="w-full border p-2 rounded mt-2" placeholder="Keywords (e.g. Sisig)" value={formData.keywordsString} onChange={e=>setFormData({...formData, keywordsString: e.target.value})} />
-        <textarea required className="w-full border p-2 rounded mt-2" rows={2} placeholder="Description" value={formData.description} onChange={e=>setFormData({...formData, description: e.target.value})} />
+        <div className="mt-4">
+           <label className="block text-sm font-bold mb-1">Description</label>
+           <textarea required className="w-full border p-2 rounded" rows={3} placeholder="Tell us about your food..." value={formData.description} onChange={e=>setFormData({...formData, description: e.target.value})} />
+        </div>
 
-        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold">
+        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors shadow-lg">
           {loading ? "Saving..." : "Save Business"}
         </button>
       </form>

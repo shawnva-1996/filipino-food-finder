@@ -2,8 +2,14 @@
 import { db } from "./firebase";
 import { 
   collection, getDocs, query, where, doc, updateDoc, 
-  increment, getDoc, setDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, orderBy, deleteDoc 
+  increment, getDoc, setDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, orderBy, deleteDoc, Timestamp 
 } from "firebase/firestore";
+
+export interface MenuItem {
+  name: string;
+  price: number;
+  imageUrl?: string;
+}
 
 export interface Store {
   id: string;
@@ -21,21 +27,29 @@ export interface Store {
   status: string;
   ownerId: string;
   ownerEmail: string;
-  priceRange?: string;
+  priceRange?: string; // Legacy $, $$, $$$
   region?: string;
   isHalal?: boolean;
   keywords?: string[];
-  imageUrl?: string;
+  imageUrl?: string; // Main Cover
   views?: number;
-  whatsappClicks?: number; // New metric
+  whatsappClicks?: number;
   isFeatured?: boolean;
-  // New Social Links
+  
+  // New Fields
+  foodImages?: string[]; // Array of carousel images
+  menuItems?: MenuItem[]; // Structured Menu
+  nearestMrt?: string; // e.g. "Toa Payoh"
+  walkingTime?: string; // e.g. "10 mins"
+  lastUpdated?: Timestamp;
+
+  // Social Links
   websiteUrl?: string;
   tiktokUrl?: string;
   facebookUrl?: string;
   instagramUrl?: string;
-  menuUrl?: string; // Image URL
-  menuText?: string; // Text list
+  menuUrl?: string; 
+  menuText?: string; 
 }
 
 export interface UserProfile {
@@ -45,7 +59,7 @@ export interface UserProfile {
   email: string;
   phoneNumber: string;
   favorites?: string[]; 
-  role: "user" | "business" | "admin"; // Explicit Role
+  role: "user" | "business" | "admin";
   emailVerified?: boolean;
 }
 
@@ -64,7 +78,10 @@ export async function getStores(searchTerm: string = "") {
     filtered = filtered.filter(store => 
       store.name.toLowerCase().includes(lowerTerm) || 
       store.description.toLowerCase().includes(lowerTerm) ||
-      store.keywords?.some(k => k.toLowerCase().includes(lowerTerm))
+      store.address.toLowerCase().includes(lowerTerm) ||
+      store.nearestMrt?.toLowerCase().includes(lowerTerm) ||
+      store.keywords?.some(k => k.toLowerCase().includes(lowerTerm)) ||
+      store.menuItems?.some(m => m.name.toLowerCase().includes(lowerTerm))
     );
   }
   return filtered;
