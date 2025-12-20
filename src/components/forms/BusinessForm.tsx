@@ -7,9 +7,16 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
-import { Loader2, ImagePlus, CheckCircle, Trash2, Plus } from "lucide-react";
+import { Loader2, ImagePlus, CheckCircle, Trash2, Plus, X, Pencil, Eye, EyeOff } from "lucide-react";
 import { APIProvider, useMapsLibrary } from "@vis.gl/react-google-maps";
-import { MenuItem } from "@/lib/db";
+
+interface MenuItem {
+  name: string;
+  price: number;
+  imageUrl?: string;
+  isAvailable?: boolean;
+  imageFile?: File; // Temp for upload
+}
 
 interface Props {
   initialData?: any;
@@ -24,7 +31,6 @@ const DEFAULT_FORM = {
   nearestMrt: "", walkingTime: ""
 };
 
-// Address Autocomplete Component
 function AddressInput({ address, setAddress, setVerifiedLocation }: any) {
   const placesLib = useMapsLibrary('places');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -82,6 +88,8 @@ export default function BusinessForm({ initialData, storeId }: Props) {
   // Menu Builder State
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemImage, setNewItemImage] = useState<File | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null); 
 
   useEffect(() => {
     if (initialData) {
@@ -91,7 +99,13 @@ export default function BusinessForm({ initialData, storeId }: Props) {
       if (initialData.lat && initialData.lng) {
         setVerifiedLocation({ lat: initialData.lat, lng: initialData.lng });
       }
-      if (initialData.menuItems) setMenuItems(initialData.menuItems);
+      // Ensure existing items have availability status
+      if (initialData.menuItems) {
+        setMenuItems(initialData.menuItems.map((m: MenuItem) => ({
+          ...m, 
+          isAvailable: m.isAvailable !== undefined ? m.isAvailable : true
+        })));
+      }
       if (initialData.foodImages) setExistingFoodImages(initialData.foodImages);
     } else {
       setFormData(DEFAULT_FORM);
@@ -99,15 +113,50 @@ export default function BusinessForm({ initialData, storeId }: Props) {
     }
   }, [initialData]);
 
-  const addMenuItem = () => {
+  const addOrUpdateMenuItem = () => {
     if (!newItemName || !newItemPrice) return alert("Enter item name and price");
-    setMenuItems([...menuItems, { name: newItemName, price: parseFloat(newItemPrice) }]);
+    
+    const newItem: MenuItem = { 
+      name: newItemName, 
+      price: parseFloat(newItemPrice),
+      isAvailable: true, // Default to true
+      imageFile: newItemImage || undefined,
+      imageUrl: editingIndex !== null ? menuItems[editingIndex].imageUrl : undefined
+    };
+
+    if (editingIndex !== null) {
+      // Preserve availability status on edit unless changed elsewhere
+      newItem.isAvailable = menuItems[editingIndex].isAvailable;
+      
+      const updated = [...menuItems];
+      updated[editingIndex] = newItem;
+      setMenuItems(updated);
+      setEditingIndex(null);
+    } else {
+      setMenuItems([...menuItems, newItem]);
+    }
+
     setNewItemName("");
     setNewItemPrice("");
+    setNewItemImage(null);
+  };
+
+  const editMenuItem = (index: number) => {
+    const item = menuItems[index];
+    setNewItemName(item.name);
+    setNewItemPrice(item.price.toString());
+    setEditingIndex(index);
   };
 
   const removeMenuItem = (index: number) => {
     setMenuItems(menuItems.filter((_, i) => i !== index));
+    if (editingIndex === index) setEditingIndex(null);
+  };
+
+  const toggleAvailability = (index: number) => {
+    const updated = [...menuItems];
+    updated[index].isAvailable = !updated[index].isAvailable;
+    setMenuItems(updated);
   };
 
   const handleCancel = () => {
@@ -122,7 +171,6 @@ export default function BusinessForm({ initialData, storeId }: Props) {
     try {
       const storage = getStorage();
       
-      // 1. Upload Main Cover
       let finalImageUrl = formData.imageUrl;
       if (imageFile) {
         const ref1 = ref(storage, `stores/${user.uid}/cover_${Date.now()}`);
@@ -130,7 +178,6 @@ export default function BusinessForm({ initialData, storeId }: Props) {
         finalImageUrl = await getDownloadURL(ref1);
       }
 
-      // 2. Upload Gallery Images
       const newFoodUrls = [];
       for (const file of foodImageFiles) {
         const ref2 = ref(storage, `stores/${user.uid}/food_${Date.now()}_${file.name}`);
@@ -140,20 +187,35 @@ export default function BusinessForm({ initialData, storeId }: Props) {
       }
       const finalFoodImages = [...existingFoodImages, ...newFoodUrls];
 
+      const processedMenuItems = [];
+      for (const item of menuItems) {
+        let itemUrl = item.imageUrl || "";
+        if (item.imageFile) {
+          const ref3 = ref(storage, `stores/${user.uid}/menu_item_${Date.now()}_${item.name}`);
+          await uploadBytes(ref3, item.imageFile);
+          itemUrl = await getDownloadURL(ref3);
+        }
+        processedMenuItems.push({
+          name: item.name,
+          price: item.price,
+          isAvailable: item.isAvailable,
+          imageUrl: itemUrl
+        });
+      }
+
       const keywords = formData.keywordsString.split(",").map((k: string) => k.trim()).filter((k: string) => k.length > 0);
       
       const dataToSave = {
         ...formData,
         imageUrl: finalImageUrl || "",
         foodImages: finalFoodImages,
-        menuItems,
+        menuItems: processedMenuItems,
         keywords,
         lat: verifiedLocation.lat,
         lng: verifiedLocation.lng,
         lastUpdated: serverTimestamp()
       };
 
-      // Remove temp fields
       delete (dataToSave as any).keywordsString;
 
       if (storeId) {
@@ -181,8 +243,8 @@ export default function BusinessForm({ initialData, storeId }: Props) {
 
   if (showPendingModal) {
     return (
-      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-        <div className="bg-white p-8 rounded-xl max-w-md w-full text-center">
+      <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[9999] p-4">
+        <div className="bg-white p-8 rounded-xl max-w-md w-full text-center shadow-2xl relative">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
              <CheckCircle size={32} />
           </div>
@@ -191,7 +253,11 @@ export default function BusinessForm({ initialData, storeId }: Props) {
             Thank you for registering. Our Super Admin is currently reviewing your application. 
             This usually takes <strong>3 to 5 business days</strong>.
           </p>
-          <button onClick={() => router.push("/my-business")} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold">
+          <button 
+            type="button"
+            onClick={() => { setShowPendingModal(false); router.push("/my-business"); }} 
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 cursor-pointer"
+          >
             Got it, take me to Dashboard
           </button>
         </div>
@@ -204,10 +270,9 @@ export default function BusinessForm({ initialData, storeId }: Props) {
       <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex justify-between items-center border-b pb-4">
            <h2 className="text-xl font-bold text-gray-900">{storeId ? "Edit Business" : "Register New Business"}</h2>
-           <button type="button" onClick={handleCancel} className="text-red-600 text-sm hover:underline">Cancel Changes</button>
+           <button type="button" onClick={handleCancel} className="text-red-600 text-sm hover:underline font-bold">Cancel Changes</button>
         </div>
 
-        {/* --- MAIN INFO --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
            <div>
               <label className="block text-sm font-bold mb-2">Business Name</label>
@@ -240,11 +305,10 @@ export default function BusinessForm({ initialData, storeId }: Props) {
            </div>
         </div>
 
-        {/* --- IMAGES --- */}
         <div>
            <label className="block text-sm font-bold mb-2">Cover Image (Required)</label>
            <div className="flex items-center gap-4 mb-4">
-             {formData.imageUrl && <img src={formData.imageUrl} className="w-20 h-20 rounded object-cover border" alt="Cover" />}
+             {formData.imageUrl && <img src={formData.imageUrl} className="w-20 h-20 rounded object-contain border bg-gray-100" alt="Cover" />}
              <label className="cursor-pointer bg-gray-100 px-4 py-2 rounded flex items-center gap-2 hover:bg-gray-200">
                <ImagePlus size={20} /> Change Cover
                <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && setImageFile(e.target.files[0])} />
@@ -255,7 +319,7 @@ export default function BusinessForm({ initialData, storeId }: Props) {
            <div className="flex gap-2 overflow-x-auto pb-2">
               {existingFoodImages.map((url, i) => (
                 <div key={i} className="relative flex-shrink-0">
-                   <img src={url} className="w-20 h-20 rounded object-cover border" />
+                   <img src={url} className="w-20 h-20 rounded object-contain border bg-gray-100" />
                    <button type="button" onClick={() => setExistingFoodImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-0 right-0 bg-red-600 text-white rounded-full p-0.5"><Trash2 size={12}/></button>
                 </div>
               ))}
@@ -265,26 +329,51 @@ export default function BusinessForm({ initialData, storeId }: Props) {
                  <input type="file" multiple accept="image/*" className="hidden" onChange={e => e.target.files && setFoodImageFiles(Array.from(e.target.files))} />
               </label>
            </div>
-           {foodImageFiles.length > 0 && <p className="text-xs text-blue-600 mt-1">{foodImageFiles.length} new files selected</p>}
         </div>
 
         {/* --- MENU BUILDER --- */}
         <div className="border p-4 rounded-xl bg-gray-50">
-           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">Menu Builder <span className="text-xs font-normal text-gray-500">(Required for "From $X" display)</span></h3>
+           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">Menu Builder</h3>
            
-           <div className="flex gap-2 mb-4">
-              <input className="flex-grow border p-2 rounded" placeholder="Item Name (e.g. Chicken Rice)" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
-              <input type="number" className="w-24 border p-2 rounded" placeholder="Price $" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} />
-              <button type="button" onClick={addMenuItem} className="bg-blue-600 text-white px-4 rounded font-bold">Add</button>
+           <div className="flex flex-col gap-2 mb-4 bg-white p-3 rounded border">
+              <div className="flex gap-2">
+                <input className="flex-grow border p-2 rounded" placeholder="Item Name" value={newItemName} onChange={e => setNewItemName(e.target.value)} />
+                <input type="number" className="w-24 border p-2 rounded" placeholder="Price $" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} />
+              </div>
+              <div className="flex items-center gap-2">
+                 <label className="flex-grow flex items-center gap-2 cursor-pointer bg-gray-100 p-2 rounded text-sm text-gray-600 hover:bg-gray-200">
+                    <ImagePlus size={16}/> 
+                    {newItemImage ? newItemImage.name : "Upload Item Image"}
+                    <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && setNewItemImage(e.target.files[0])} />
+                 </label>
+                 <button type="button" onClick={addOrUpdateMenuItem} className={`text-white px-6 py-2 rounded font-bold ${editingIndex !== null ? "bg-orange-500 hover:bg-orange-600" : "bg-blue-600 hover:bg-blue-700"}`}>
+                   {editingIndex !== null ? "Update" : "Add"}
+                 </button>
+                 {editingIndex !== null && (
+                   <button type="button" onClick={() => { setEditingIndex(null); setNewItemName(""); setNewItemPrice(""); }} className="text-gray-500 hover:text-gray-700 p-2"><X size={20}/></button>
+                 )}
+              </div>
            </div>
 
            <div className="space-y-2">
               {menuItems.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border shadow-sm">
-                   <span className="font-medium">{item.name}</span>
-                   <div className="flex items-center gap-4">
-                      <span className="text-green-600 font-bold">${item.price.toFixed(2)}</span>
-                      <button type="button" onClick={() => removeMenuItem(idx)} className="text-red-500 hover:text-red-700"><Trash2 size={16}/></button>
+                <div key={idx} className={`flex justify-between items-center bg-white p-2 rounded border shadow-sm ${editingIndex === idx ? "border-orange-500 ring-1 ring-orange-500" : ""} ${!item.isAvailable ? "opacity-60 bg-gray-100" : ""}`}>
+                   <div className="flex items-center gap-3">
+                      {item.imageUrl ? <img src={item.imageUrl} className="w-10 h-10 rounded object-contain bg-gray-100" /> : 
+                       item.imageFile ? <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center text-[10px]">New</div> : 
+                       <div className="w-10 h-10 bg-gray-100 rounded"/>}
+                      <div>
+                        <span className="font-medium block">{item.name}</span>
+                        <span className="text-xs text-gray-500">${item.price.toFixed(2)}</span>
+                        {!item.isAvailable && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded font-bold ml-2">SOLD OUT</span>}
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => toggleAvailability(idx)} className={`p-2 rounded ${item.isAvailable ? "text-green-600 hover:bg-green-50" : "text-gray-400 hover:bg-gray-200"}`} title={item.isAvailable ? "Mark Sold Out" : "Mark Available"}>
+                        {item.isAvailable ? <Eye size={16}/> : <EyeOff size={16}/>}
+                      </button>
+                      <button type="button" onClick={() => editMenuItem(idx)} className="text-blue-500 hover:bg-blue-50 p-2 rounded"><Pencil size={16}/></button>
+                      <button type="button" onClick={() => removeMenuItem(idx)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 size={16}/></button>
                    </div>
                 </div>
               ))}

@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, query, getDocs, orderBy, limit, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, query, getDocs, orderBy, limit, doc, deleteDoc, updateDoc, collectionGroup } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { Trash2, Activity, X, Download, Star } from "lucide-react";
+import { Trash2, Activity, X, Download, Star, MessageSquare } from "lucide-react";
 
 export default function AdminDashboard() {
   const { user, isAdmin, loading } = useAuth();
@@ -14,6 +14,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
+  const [dishReviews, setDishReviews] = useState<any[]>([]);
   
   const [tab, setTab] = useState("activity");
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -33,6 +34,17 @@ export default function AdminDashboard() {
 
     const eventsSnap = await getDocs(query(collection(db, "events"), orderBy("timestamp", "desc"), limit(100)));
     setEvents(eventsSnap.docs.map(d => ({id: d.id, ...d.data()})));
+
+    // Fetch Reviews across ALL subcollections
+    const reviewsSnap = await getDocs(query(collectionGroup(db, "dish_reviews"), orderBy("createdAt", "desc"), limit(50)));
+    setDishReviews(reviewsSnap.docs.map(d => ({id: d.id, ref: d.ref, ...d.data()})));
+  };
+
+  const deleteReview = async (review: any) => {
+    if(confirm("Delete this review?")) {
+      await deleteDoc(review.ref); // Using the ref from collectionGroup
+      fetchData();
+    }
   };
 
   const toggleApprove = async (storeId: string, currentStatus: string) => {
@@ -59,7 +71,6 @@ export default function AdminDashboard() {
     const csvContent = "data:text/csv;charset=utf-8," 
       + "First Name,Last Name,Email,Phone,Role\n"
       + users.map(u => `${u.firstName},${u.lastName},${u.email},${u.phoneNumber},${u.role}`).join("\n");
-    
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -78,6 +89,7 @@ export default function AdminDashboard() {
       
       <div className="flex flex-wrap gap-2 mb-6">
         <button onClick={() => setTab("activity")} className={`px-4 py-2 rounded ${tab==="activity" ? "bg-blue-600 text-white" : "bg-gray-200"}`}>Live Activity</button>
+        <button onClick={() => setTab("reviews")} className={`px-4 py-2 rounded ${tab==="reviews" ? "bg-blue-600 text-white" : "bg-gray-200"}`}>Reviews</button>
         <button onClick={() => setTab("stores")} className={`px-4 py-2 rounded ${tab==="stores" ? "bg-blue-600 text-white" : "bg-gray-200"}`}>Stores ({stores.length})</button>
         <button onClick={() => setTab("users")} className={`px-4 py-2 rounded ${tab==="users" ? "bg-blue-600 text-white" : "bg-gray-200"}`}>Users ({users.length})</button>
       </div>
@@ -114,6 +126,26 @@ export default function AdminDashboard() {
                 </div>
               ) : <p className="text-gray-500 text-center mt-20">Select a user to inspect.</p>}
            </div>
+        </div>
+      )}
+
+      {/* REVIEWS TAB */}
+      {tab === "reviews" && (
+        <div className="space-y-4">
+           {dishReviews.map(r => (
+             <div key={r.id} className="bg-white p-4 rounded-lg shadow border flex gap-4">
+                {r.imageUrl && <img src={r.imageUrl} className="w-16 h-16 object-cover rounded bg-gray-100" />}
+                <div className="flex-grow">
+                   <div className="flex justify-between">
+                      <h4 className="font-bold">{r.dishName} <span className="font-normal text-gray-500">at {r.storeName}</span></h4>
+                      <div className="flex text-yellow-500 text-sm"><Star size={14} fill="currentColor"/> {r.rating}</div>
+                   </div>
+                   <p className="text-sm text-gray-600 my-1">{r.comment}</p>
+                   <div className="text-xs text-gray-400">By {r.userName}</div>
+                </div>
+                <button onClick={() => deleteReview(r)} className="text-red-500 hover:bg-red-50 p-2 rounded self-start"><Trash2 size={18}/></button>
+             </div>
+           ))}
         </div>
       )}
 

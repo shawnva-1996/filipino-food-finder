@@ -1,40 +1,51 @@
 // src/components/layout/Footer.tsx
+"use client";
+
+import { UtensilsCrossed } from "lucide-react";
+import Link from "next/link";
+
 export default function Footer() {
   return (
-    <footer className="bg-gray-50 border-t border-gray-100 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <footer className="bg-blue-900 text-white py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           
           {/* Brand */}
-          <div>
-            <h3 className="font-bold text-lg text-gray-900 mb-2">Filipino Food Finder</h3>
-            <p className="text-gray-500 text-sm">
-              Connecting the Filipino community in Singapore through the taste of home.
+          <div className="col-span-1 md:col-span-2">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="bg-white p-2 rounded-lg text-blue-900">
+                <UtensilsCrossed size={24} />
+              </div>
+              <span className="font-bold text-xl tracking-tight">Filipino Food Finder SG</span>
+            </div>
+            <p className="text-blue-200 text-sm max-w-sm">
+              Connecting Filipinos in Singapore with the taste of home. 
+              Find authentic dishes, support local businesses, and satisfy your cravings.
             </p>
           </div>
 
-          {/* Quick Links */}
+          {/* Links */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Quick Links</h4>
-            <ul className="space-y-2 text-sm text-gray-500">
-              <li><a href="/map" className="hover:text-orange-600">Browse Map</a></li>
-              <li><a href="/login" className="hover:text-orange-600">Login</a></li>
-              <li><a href="/register-business" className="hover:text-orange-600">Add Your Business</a></li>
+            <h3 className="font-bold mb-4 uppercase text-sm tracking-wider text-blue-300">Explore</h3>
+            <ul className="space-y-2 text-sm text-blue-100">
+              <li><Link href="/map" className="hover:text-white transition-colors">Find Food</Link></li>
+              <li><Link href="/register" className="hover:text-white transition-colors">Join as Business</Link></li>
+              <li><Link href="/login" className="hover:text-white transition-colors">Login</Link></li>
             </ul>
           </div>
 
           {/* Contact */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Contact</h4>
-            <p className="text-sm text-gray-500">
-              Questions? Email us at:<br/>
-              <a href="mailto:support@filipinofoodfinder.sg" className="text-orange-600">support@filipinofoodfinder.sg</a>
-            </p>
+            <h3 className="font-bold mb-4 uppercase text-sm tracking-wider text-blue-300">Contact</h3>
+            <ul className="space-y-2 text-sm text-blue-100">
+              <li>General Inquiries:</li>
+              <li><a href="mailto:shawn@vizalliance.com.sg" className="font-bold hover:text-white">shawn@vizalliance.com.sg</a></li>
+            </ul>
           </div>
         </div>
-        
-        <div className="border-t border-gray-200 mt-8 pt-8 text-center text-sm text-gray-400">
-          © {new Date().getFullYear()} Filipino Food Finder. All rights reserved.
+
+        <div className="border-t border-blue-800 mt-12 pt-8 text-center text-sm text-blue-300">
+          <p>© {new Date().getFullYear()} Filipino Food Finder SG. All rights reserved.</p>
         </div>
       </div>
     </footer>

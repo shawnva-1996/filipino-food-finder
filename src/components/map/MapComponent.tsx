@@ -4,8 +4,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import { getStores, Store, trackEvent, toggleFavorite } from "@/lib/db";
-import { useSearchParams } from "next/navigation";
-import { Navigation, Star, Heart, ExternalLink, Search, List, Map as MapIcon, Filter, Clock, MapPin } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Navigation, Star, Heart, ExternalLink, Search, List, Map as MapIcon, Clock, MapPin } from "lucide-react";
 import ReviewModal from "@/components/ui/ReviewModal";
 import ReviewsListModal from "@/components/ui/ReviewsListModal";
 import { useAuth } from "@/context/AuthContext";
@@ -40,6 +40,38 @@ const getTimeAgo = (timestamp: any) => {
   return "Just now";
 };
 
+// Auto-Swipe Carousel Component (No Crop)
+function StoreCardCarousel({ images }: { images: string[] }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (images.length <= 1) return;
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % images.length);
+    }, 3000); 
+    return () => clearInterval(interval);
+  }, [images.length]);
+
+  return (
+    <div className="w-full h-full relative overflow-hidden bg-gray-100">
+      {images.map((img, i) => (
+        <img 
+          key={i} 
+          src={img} 
+          className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`} 
+        />
+      ))}
+      {images.length > 1 && (
+        <div className="absolute bottom-2 right-2 flex gap-1 z-10">
+          {images.map((_, i) => (
+            <div key={i} className={`w-1.5 h-1.5 rounded-full ${i === index ? 'bg-black' : 'bg-gray-400'}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MapUpdater({ center, zoom }: { center: { lat: number, lng: number }, zoom: number }) {
   const map = useMap();
   useEffect(() => {
@@ -53,6 +85,7 @@ function MapUpdater({ center, zoom }: { center: { lat: number, lng: number }, zo
 
 export default function MapComponent() {
   const { user, profile, refreshProfile } = useAuth();
+  const router = useRouter();
   
   // Data
   const [allStores, setAllStores] = useState<Store[]>([]);
@@ -74,8 +107,7 @@ export default function MapComponent() {
   const [filters, setFilters] = useState({
     region: "All",
     price: "All",
-    category: "All",
-    mrt: ""
+    category: "All"
   });
 
   useEffect(() => {
@@ -93,7 +125,6 @@ export default function MapComponent() {
 
   const filteredStores = useMemo(() => {
     return allStores.filter(store => {
-      // 1. Text Search (Name, Cuisine/Keywords, Location, MRT)
       const term = searchTerm.toLowerCase();
       const matchesSearch = searchTerm === "" || 
         store.name.toLowerCase().includes(term) ||
@@ -102,16 +133,12 @@ export default function MapComponent() {
         (store.nearestMrt && store.nearestMrt.toLowerCase().includes(term)) ||
         store.keywords?.some(k => k.toLowerCase().includes(term));
 
-      // 2. Dropdown Filters
       const matchesRegion = filters.region === "All" || store.region === filters.region;
       const matchesCategory = filters.category === "All" || store.category === filters.category;
       
-      // Price Filter (Legacy + New)
       let matchesPrice = true;
       if (filters.price !== "All") {
-         // If using legacy "$"
          if (store.priceRange) matchesPrice = store.priceRange === filters.price;
-         // If using calculated price (approx)
          const min = getLowestPrice(store);
          if (min) {
             const p = parseFloat(min);
@@ -137,34 +164,28 @@ export default function MapComponent() {
     }
   };
 
+  const navigateToStore = (id: string) => {
+    router.push(`/store/${id}`);
+  };
+
   const renderStoreCard = (store: Store) => {
     const minPrice = getLowestPrice(store);
     const lastUpdated = getTimeAgo(store.lastUpdated);
     const images = store.foodImages && store.foodImages.length > 0 ? store.foodImages : (store.imageUrl ? [store.imageUrl] : []);
 
     return (
-      <div key={store.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col sm:flex-row h-auto min-h-[220px]">
+      <div 
+        key={store.id} 
+        onClick={() => navigateToStore(store.id)}
+        className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col sm:flex-row h-auto min-h-[220px] cursor-pointer"
+      >
         {/* Carousel Side */}
-        <div className="w-full sm:w-64 h-64 sm:h-full bg-gray-100 flex-shrink-0 relative overflow-hidden group">
-          {images.length > 0 ? (
-            <div className="flex overflow-x-auto snap-x snap-mandatory h-full w-full scrollbar-hide">
-              {images.map((img, i) => (
-                <img key={i} src={img} className="w-full h-full object-cover flex-shrink-0 snap-center" />
-              ))}
-            </div>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Image</div>
-          )}
+        <div className="w-full sm:w-64 h-64 sm:h-full bg-gray-100 flex-shrink-0 relative">
+          {images.length > 0 ? <StoreCardCarousel images={images} /> : <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Image</div>}
           
-          {/* Overlay Stats */}
-          <div className="absolute top-2 left-2 bg-white/90 px-2 py-1 rounded text-xs font-bold text-gray-800 shadow-sm flex items-center gap-1">
+          <div className="absolute top-2 left-2 bg-white/90 px-2 py-1 rounded text-xs font-bold text-gray-800 shadow-sm flex items-center gap-1 z-10">
              <Star size={12} className="fill-yellow-400 text-yellow-400"/> {store.rating?.toFixed(1) || "New"}
           </div>
-          {images.length > 1 && (
-            <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 rounded-full">
-               Swipe for more
-            </div>
-          )}
         </div>
 
         {/* Content Side */}
@@ -172,27 +193,22 @@ export default function MapComponent() {
           <div>
             <div className="flex justify-between items-start">
                <div>
-                 <h3 className="font-bold text-xl text-blue-900 leading-tight">{store.name}</h3>
-                 <a 
-                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.address)}`} 
-                   target="_blank" 
-                   className="text-sm text-gray-500 hover:text-blue-600 hover:underline flex items-center gap-1 mt-1"
-                 >
+                 <h3 className="font-bold text-xl text-blue-900 leading-tight hover:underline">{store.name}</h3>
+                 <span className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                    <MapPin size={14}/> {store.address}
-                 </a>
+                 </span>
                </div>
-               <button onClick={async (e) => {
+               <button onClick={(e) => {
                    e.stopPropagation();
                    if(!user) return alert("Login required");
                    const isFav = profile?.favorites?.includes(store.id) || false;
-                   await toggleFavorite(user.uid, store.id, isFav);
-                   await refreshProfile();
-                 }} className="text-red-500 hover:bg-red-50 p-1 rounded-full">
+                   toggleFavorite(user.uid, store.id, isFav);
+                   refreshProfile();
+                 }} className="text-red-500 hover:bg-red-50 p-1 rounded-full z-10">
                  <Heart size={20} fill={profile?.favorites?.includes(store.id) ? "currentColor" : "none"} />
                </button>
             </div>
 
-            {/* MRT & Price Badges */}
             <div className="flex flex-wrap gap-2 mt-3">
                {store.nearestMrt && (
                  <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs flex items-center gap-1 font-medium">
@@ -216,12 +232,9 @@ export default function MapComponent() {
              </div>
              
              <div className="flex gap-2">
-               <button onClick={() => { setSelectedStore(store); setShowReadReviews(true); }} className="text-xs text-blue-600 underline px-2 py-1">
-                 {store.reviewsCount} Reviews
+               <button className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 flex items-center gap-2">
+                 View Menu & Order
                </button>
-               <a href={`https://wa.me/${store.contactNumber}`} target="_blank" onClick={() => user && trackEvent(user.uid, store.id, "whatsapp_click")} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 flex items-center gap-2">
-                 <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-4 h-4 invert brightness-0" /> Order
-               </a>
              </div>
           </div>
         </div>
@@ -253,7 +266,7 @@ export default function MapComponent() {
                 <option value="General">General</option><option value="Kapampangan">Kapampangan</option><option value="Ilocano">Ilocano</option><option value="Bisaya">Bisaya</option><option value="Bicolano">Bicolano</option><option value="Tagalog">Tagalog</option>
              </select>
              <select className="border rounded-lg px-3 py-2 text-sm bg-white" value={filters.price} onChange={e=>setFilters({...filters, price: e.target.value})}>
-                <option value="All">All Prices</option><option value="$">Budget (&lt;$10)</option><option value="$$">Mid ($10-$20)</option><option value="$$$">High (&gt;$20)</option>
+                <option value="All">All Prices</option><option value="$">Budget</option><option value="$$">Mid</option><option value="$$$">High</option>
              </select>
              
              <div className="flex bg-gray-100 p-1 rounded-lg border ml-auto">
@@ -274,7 +287,7 @@ export default function MapComponent() {
                 {userLocation && <AdvancedMarker position={userLocation}><div className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg animate-pulse" /></AdvancedMarker>}
 
                 {filteredStores.map((store) => (
-                  <AdvancedMarker key={store.id} position={{ lat: store.lat, lng: store.lng }} onClick={() => { setSelectedStore(store); if(user) trackEvent(user.uid, store.id, "view"); }}>
+                  <AdvancedMarker key={store.id} position={{ lat: store.lat, lng: store.lng }} onClick={() => setSelectedStore(store)}>
                     <div className="relative group cursor-pointer hover:z-50 hover:scale-110 transition-transform">
                        <div className="bg-white rounded-lg shadow-md flex flex-col items-center p-1 border border-gray-300 min-w-[100px] max-w-[120px]">
                           {store.imageUrl ? (
@@ -283,9 +296,17 @@ export default function MapComponent() {
                             <div className="w-full h-8 bg-red-100 flex items-center justify-center text-red-600 font-bold rounded-t text-xs">No Img</div>
                           )}
                           <span className="text-[10px] font-bold text-center leading-tight px-1 w-full truncate">{store.name}</span>
-                          {store.keywords && store.keywords[0] && <span className="text-[9px] text-gray-500 truncate w-full text-center">{store.keywords[0]}</span>}
+                          
+                          {/* KEYWORDS */}
+                          {store.keywords && store.keywords[0] && (
+                             <span className="text-[9px] text-gray-500 truncate w-full text-center">{store.keywords[0]}</span>
+                          )}
+
                           <div className="flex justify-between items-center w-full px-1 mt-1 border-t pt-1">
-                             <div className="flex items-center gap-0.5"><Star size={8} className="fill-yellow-400 text-yellow-400" /><span className="text-[9px] font-bold">{store.rating?.toFixed(1) || "New"}</span></div>
+                             <div className="flex items-center gap-0.5">
+                               <Star size={8} className="fill-yellow-400 text-yellow-400" />
+                               <span className="text-[9px] font-bold">{store.rating?.toFixed(1) || "New"}</span>
+                             </div>
                              <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-3 h-3" />
                           </div>
                        </div>
@@ -295,21 +316,31 @@ export default function MapComponent() {
                 ))}
 
                 {selectedStore && (
-                  <InfoWindow position={{ lat: selectedStore.lat, lng: selectedStore.lng }} onCloseClick={() => setSelectedStore(null)} headerContent={<div className="font-bold">{selectedStore.name}</div>}>
-                    <div className="p-2 min-w-[240px] max-w-[260px]">
+                  <InfoWindow 
+                    position={{ lat: selectedStore.lat, lng: selectedStore.lng }} 
+                    onCloseClick={() => setSelectedStore(null)} 
+                    headerContent={<div className="font-bold">{selectedStore.name}</div>}
+                  >
+                    {/* ENTIRE INFO WINDOW CLICKABLE TO NAVIGATE */}
+                    <div 
+                      className="p-2 min-w-[240px] max-w-[260px] cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => navigateToStore(selectedStore.id)}
+                    >
                       {selectedStore.imageUrl && <img src={selectedStore.imageUrl} className="w-full h-24 object-cover rounded mb-2" />}
-                      <div className="flex gap-2 mb-2 flex-wrap">
+                      
+                      <div className="flex gap-2 mb-2 flex-wrap" onClick={e => e.stopPropagation()}>
                          {selectedStore.facebookUrl && <a href={ensureUrl(selectedStore.facebookUrl)} target="_blank" className="text-blue-600 text-xs hover:underline">Facebook</a>}
                          {selectedStore.instagramUrl && <a href={ensureUrl(selectedStore.instagramUrl)} target="_blank" className="text-pink-600 text-xs hover:underline">Instagram</a>}
                       </div>
-                      
-                      {/* Show MRT in Popup */}
+
+                      {/* MRT Info */}
                       {selectedStore.nearestMrt && (
                         <p className="text-xs font-bold text-purple-700 mb-2">🚇 {selectedStore.walkingTime ? selectedStore.walkingTime + " from " : ""}{selectedStore.nearestMrt}</p>
                       )}
 
                       <div className="flex justify-between items-center mb-3">
-                         <button onClick={async () => {
+                         <button onClick={async (e) => {
+                             e.stopPropagation(); // Don't navigate
                              if(!user) return alert("Login required");
                              const isFav = profile?.favorites?.includes(selectedStore.id) || false;
                              await toggleFavorite(user.uid, selectedStore.id, isFav);
@@ -318,12 +349,15 @@ export default function MapComponent() {
                            <Heart size={16} fill={profile?.favorites?.includes(selectedStore.id) ? "currentColor" : "none"} />
                            {profile?.favorites?.includes(selectedStore.id) ? "Saved" : "Save"}
                          </button>
-                         <button onClick={() => setShowReadReviews(true)} className="text-blue-600 text-xs hover:underline">Reviews ({selectedStore.reviewsCount || 0})</button>
-                         <button onClick={() => setShowWriteReview(true)} className="text-xs border px-2 py-1 rounded hover:bg-gray-50">Rate</button>
+                         <button onClick={(e) => { e.stopPropagation(); setShowReadReviews(true); }} className="text-blue-600 text-xs hover:underline">
+                           Reviews ({selectedStore.reviewsCount || 0})
+                         </button>
+                         <button onClick={(e) => { e.stopPropagation(); setShowWriteReview(true); }} className="text-xs border px-2 py-1 rounded hover:bg-gray-50">Rate</button>
                       </div>
-                      <a href={`https://wa.me/${selectedStore.contactNumber}`} target="_blank" onClick={() => user && trackEvent(user.uid, selectedStore.id, "whatsapp_click")} className="block w-full text-center bg-green-600 text-white text-xs py-2 rounded font-bold hover:bg-green-700 flex items-center justify-center gap-2">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-4 h-4 invert brightness-0" /> WhatsApp Order
-                      </a>
+                      
+                      <div className="mt-2 text-center text-blue-600 text-sm font-bold underline">
+                        View Menu & Details →
+                      </div>
                     </div>
                   </InfoWindow>
                 )}

@@ -34,15 +34,10 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
 # filipino-food-finder
 
 # Feature Updates
-store cards/store pins, when clicked, should bring user to a page showing 
-
-http://localhost:3000/my-business 
-there should be a cancel changes button
-business users should be able to upload multiple images of the food they have on offer, lable it with a name and price tag
-
 http://localhost:3000/ - featured cravings should be changed to links to featured tiktoks
 
 when users pay, they should pay to filipino food finder first, filipino food finder earns its cut, then business owner is paid
@@ -50,13 +45,9 @@ when users pay, they should pay to filipino food finder first, filipino food fin
 ensure the design is mobile friendly and able to be accessed on multiple browsers
 
 # future works
-
 shop feature for users to purchase filipino products and ingredients directly from the store 
 
 # bugs
-Change support@filipinofoodfinder.sg to shawn@vizalliance.com.sg
-
-after registering, Application Submitted! modal cannot be dismissed, button cannot be pressed
 
 # prompt
 when emitting codes, emit the full code so I can easily copy and paste    
