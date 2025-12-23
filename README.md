@@ -38,18 +38,23 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 # filipino-food-finder
 
 # Feature Updates
-http://localhost:3000/ - featured cravings should be changed to links to featured tiktoks
-
-when users pay, they should pay to filipino food finder first, filipino food finder earns its cut, then business owner is paid
 
 ensure the design is mobile friendly and able to be accessed on multiple browsers
 
 # future works
 shop feature for users to purchase filipino products and ingredients directly from the store 
 
+when users pay, they should pay to filipino food finder first, filipino food finder earns its cut, then business owner is paid
+
+
 # bugs
+instead of http://localhost:3000/store/riDvIe6ymmT5tQLKByZC, it should be http://localhost:3000/store/Good-Bites (the last part should be the store name, not the store ID)
 
 # prompt
+use tailwind v4 (no tailwind.config.ts file)
+
+<!-- use nextjs 15.1.x (then use tailwind 3) -->
+
 when emitting codes, emit the full code so I can easily copy and paste    
 
 to ensure no features are lost between every iteration, only emit the code file by file, emitting the full, corrected code with ALL features each time

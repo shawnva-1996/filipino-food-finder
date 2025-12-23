@@ -13,7 +13,8 @@ import {
   increment,
   arrayUnion,
   arrayRemove,
-  Timestamp
+  Timestamp,
+  limit
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -90,6 +91,20 @@ export interface UserProfile {
   photoURL?: string;
 }
 
+export interface DishReview {
+  id?: string;
+  storeId: string;
+  storeName: string;
+  dishName: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  rating: number;
+  comment: string;
+  imageUrl?: string;
+  createdAt: any;
+}
+
 // --- CORE STORE FUNCTIONS ---
 
 export const getStores = async (searchTerm: string = "") => {
@@ -125,41 +140,63 @@ export const getStores = async (searchTerm: string = "") => {
   }
 };
 
-export const getStoreById = async (id: string) => {
+// ** UPDATED: Supports slug/name lookup **
+export const getStoreById = async (idOrName: string) => {
   try {
-    const docRef = doc(db, "stores", id);
+    // 1. Try fetching by Document ID first (Direct lookup is fastest)
+    const docRef = doc(db, "stores", idOrName);
     const snap = await getDoc(docRef);
-    return snap.exists() ? { id: snap.id, ...snap.data() } as Store : null;
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as Store;
+    }
+
+    // 2. If not found by ID, try finding by Name (Slug logic)
+    // URL Slug "Good-Bites" -> DB Name "Good Bites"
+    const decodedName = decodeURIComponent(idOrName);
+    const nameWithSpaces = idOrName.replace(/-/g, " "); // Basic slug reversal
+    
+    const storesRef = collection(db, "stores");
+    // Query matches either raw decoded or space-replaced version
+    const q = query(storesRef, where("name", "in", [decodedName, nameWithSpaces]), limit(1));
+    const querySnap = await getDocs(q);
+
+    if (!querySnap.empty) {
+      const doc = querySnap.docs[0];
+      return { id: doc.id, ...doc.data() } as Store;
+    }
+
+    return null;
   } catch (error) {
-    console.error("Error getting store by ID:", error);
+    console.error("Error getting store by ID/Slug:", error);
     return null;
   }
 };
 
 // --- REVIEWS & DISHES ---
 
-// Fetch Top Dishes across ALL stores based on menu item ratings
 export const getTopDishes = async (limitCount = 6) => {
   try {
-    // 1. Fetch all stores
     const storesRef = collection(db, "stores");
     const snapshot = await getDocs(storesRef);
     
     let allDishes: any[] = [];
 
-    // 2. Extract Menu Items from each store
     snapshot.docs.forEach(doc => {
       const store = doc.data() as Store;
+      // Ensure we only show dishes from approved stores
       if (store.status === 'approved' && store.menuItems && Array.isArray(store.menuItems)) {
         store.menuItems.forEach((item: MenuItem) => {
           // Only include dishes that have at least one rating
           if (item.avgRating && item.avgRating > 0) {
+            // Create a safe slug for the URL
+            const slug = store.name.replace(/\s+/g, '-');
+            
             allDishes.push({
               ...item,
-              storeId: doc.id,
+              storeId: slug, // ** Use Slug for URL linking **
+              realStoreId: doc.id, 
               storeName: store.name,
               storeAddress: store.address || "",
-              // Fallback to store image if dish has no image
               imageUrl: item.imageUrl || store.imageUrl 
             });
           }
@@ -167,13 +204,12 @@ export const getTopDishes = async (limitCount = 6) => {
       }
     });
 
-    // 3. Sort by Rating (Desc), then by Review Count (Desc)
+    // Sort Descending by Rating, then Review Count
     allDishes.sort((a, b) => {
       if (b.avgRating !== a.avgRating) return (b.avgRating || 0) - (a.avgRating || 0);
       return (b.reviewCount || 0) - (a.reviewCount || 0);
     });
 
-    // 4. Return top X
     return allDishes.slice(0, limitCount);
   } catch (error) {
     console.error("Error getting top dishes:", error);
@@ -181,7 +217,7 @@ export const getTopDishes = async (limitCount = 6) => {
   }
 };
 
-// Used for Legacy/General Store Reviews (Sub-collection)
+// ** LEGACY: Fetch Store Reviews from Subcollection **
 export const getStoreReviews = async (storeId: string) => {
   try {
     const q = query(
@@ -192,6 +228,22 @@ export const getStoreReviews = async (storeId: string) => {
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (error) {
     console.error("Error getting store reviews:", error);
+    return [];
+  }
+};
+
+// ** LEGACY: Fetch Dish Reviews from Subcollection **
+// (Retained for backward compatibility if you have old data here)
+export const getDishReviews = async (storeId: string, dishName?: string) => {
+  try {
+    let q = query(collection(db, "stores", storeId, "dish_reviews"), orderBy("createdAt", "desc"));
+    if (dishName) {
+      q = query(collection(db, "stores", storeId, "dish_reviews"), where("dishName", "==", dishName), orderBy("createdAt", "desc"));
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as DishReview[];
+  } catch (error) {
+    console.error("Error getting legacy dish reviews:", error);
     return [];
   }
 };
@@ -237,7 +289,6 @@ export const toggleFavorite = async (uid: string, storeId: string, isFavorite: b
 
 export const trackEvent = async (userId: string, storeId: string, type: "view" | "whatsapp_click") => {
   try {
-    // 1. Log the event
     await addDoc(collection(db, "events"), {
       userId,
       storeId,
@@ -245,7 +296,6 @@ export const trackEvent = async (userId: string, storeId: string, type: "view" |
       timestamp: serverTimestamp()
     });
 
-    // 2. Increment counters on the Store document
     const storeRef = doc(db, "stores", storeId);
     if (type === "view") {
       await updateDoc(storeRef, { views: increment(1) });

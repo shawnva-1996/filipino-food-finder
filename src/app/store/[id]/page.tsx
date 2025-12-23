@@ -1,22 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { getStoreById, Store, trackEvent } from "@/lib/db";
-// Use the new CRUD function for reviews to ensure compatibility
 import { getReviewsByRestaurant } from "@/lib/firebase-reviews";
 import { DishReview } from "@/lib/types";
-
 import { Star, MapPin, Phone, Globe, Facebook, Instagram, ChevronLeft, ChevronRight, Plus, Minus, ShoppingCart, MessageCircle, User as UserIcon } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import DishReviewModal from "@/components/ui/DishReviewModal";
+import Image from "next/image";
 
 // --- HELPERS ---
 const cleanPhoneNumber = (phone: string) => {
   if (!phone) return "";
   let cleaned = phone.replace(/\D/g, "");
-  // SG Specific Regex: Starts with 6, 8, or 9 and is 8 digits long
   if (cleaned.length === 8 && (cleaned.startsWith("8") || cleaned.startsWith("9") || cleaned.startsWith("6"))) {
     cleaned = "65" + cleaned;
   }
@@ -67,6 +65,8 @@ function HeroCarousel({ images, storeName }: { images: string[], storeName: stri
 export default function StoreDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
+  const router = useRouter();
+  
   const [store, setStore] = useState<Store | null>(null);
   const [reviews, setReviews] = useState<DishReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +74,12 @@ export default function StoreDetailPage() {
   
   // States
   const [cart, setCart] = useState<{ [key: string]: number }>({});
-  const [reviewDish, setReviewDish] = useState<string | null>(null); // Acts as "isOpen" for the modal if not null
+  
+  // Review Modal State: 
+  // - null = closed
+  // - "" = General Review
+  // - "Adobo" = Specific Dish Review
+  const [reviewDishName, setReviewDishName] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof id === "string") {
@@ -84,6 +89,7 @@ export default function StoreDetailPage() {
 
   const fetchData = async () => {
     if (typeof id === "string") {
+      // 1. Fetch Store Data (handles Slug or ID)
       const storeData = await getStoreById(id);
       setStore(storeData);
       
@@ -93,7 +99,7 @@ export default function StoreDetailPage() {
         if (storeData.foodImages) imgs.push(...storeData.foodImages);
         setAllImages(Array.from(new Set(imgs))); 
         
-        // Fetch reviews using the new system
+        // 2. Fetch Reviews (Must use real ID, not slug)
         const reviewsData = await getReviewsByRestaurant(storeData.id);
         setReviews(reviewsData);
       }
@@ -142,6 +148,15 @@ export default function StoreDetailPage() {
     const encoded = encodeURIComponent(message);
     const cleanNumber = cleanPhoneNumber(store.contactNumber);
     return `https://wa.me/${cleanNumber}?text=${encoded}`;
+  };
+
+  // Trigger Review Modal
+  const handleOpenReview = (dishName: string = "") => {
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    setReviewDishName(dishName);
   };
 
   if (loading) return (
@@ -193,19 +208,6 @@ export default function StoreDetailPage() {
              </div>
            </div>
 
-           {allImages.length > 0 && (
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h2 className="text-xl font-bold mb-4 text-gray-900">Gallery</h2>
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                  {allImages.map((img, i) => (
-                    <div key={i} className="aspect-square rounded-lg overflow-hidden border bg-gray-100 cursor-pointer hover:opacity-90 transition-opacity">
-                      <img src={img} className="w-full h-full object-cover" alt="Gallery" />
-                    </div>
-                  ))}
-                </div>
-             </div>
-           )}
-
            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
              <h2 className="text-xl font-bold mb-6 text-gray-900">Menu</h2>
              
@@ -214,7 +216,9 @@ export default function StoreDetailPage() {
                  {store.menuItems.map((item, idx) => (
                    <div key={idx} className={`flex gap-3 border p-3 rounded-lg bg-white ${item.isAvailable === false ? 'opacity-60 bg-gray-50' : 'hover:shadow-md transition-shadow'}`}>
                       {item.imageUrl ? (
-                        <img src={item.imageUrl} className="w-24 h-24 rounded-md object-cover bg-gray-100 border flex-shrink-0" />
+                        <div className="w-24 h-24 flex-shrink-0 relative bg-gray-100 rounded-md overflow-hidden">
+                          <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />
+                        </div>
                       ) : (
                         <div className="w-24 h-24 rounded-md bg-gray-100 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">No Img</div>
                       )}
@@ -233,15 +237,14 @@ export default function StoreDetailPage() {
                         </div>
                         
                         <div className="flex items-center justify-between mt-3">
-                           {/* REVIEW BUTTON */}
+                           {/* Review Button - Triggers Modal with Item Name */}
                            <button 
-                              onClick={() => setReviewDish(item.name)} 
+                              onClick={() => handleOpenReview(item.name)} 
                               className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold bg-blue-50 px-2 py-1 rounded-full transition-colors"
                            >
                              <MessageCircle size={12}/> Rate Dish
                            </button>
 
-                           {/* CART CONTROLS */}
                            {item.isAvailable !== false && (
                               <div className="flex items-center gap-2">
                                  <button onClick={() => updateCart(item.name, -1)} className="p-1 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-600" disabled={!cart[item.name]}><Minus size={14}/></button>
@@ -262,14 +265,13 @@ export default function StoreDetailPage() {
            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold text-gray-900">Reviews ({reviews.length})</h2>
-                {user && (
-                  <button 
-                    onClick={() => setReviewDish("")} 
-                    className="text-sm font-bold text-orange-600 hover:underline"
-                  >
-                    Write a Review
-                  </button>
-                )}
+                {/* General Review Button - Triggers Modal with empty string */}
+                <button 
+                  onClick={() => handleOpenReview("")} 
+                  className="text-sm font-bold text-orange-600 hover:underline"
+                >
+                  Write a Review
+                </button>
              </div>
              
              <div className="space-y-6">
@@ -277,9 +279,9 @@ export default function StoreDetailPage() {
                   <div key={r.id} className="border-b border-gray-100 pb-6 last:border-0 last:pb-0">
                     <div className="flex items-center justify-between mb-2">
                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
+                          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden relative">
                              {r.userPhoto ? (
-                               <img src={r.userPhoto} alt={r.userName} className="w-full h-full object-cover"/>
+                               <Image src={r.userPhoto} alt={r.userName} fill className="object-cover"/>
                              ) : (
                                <UserIcon className="w-5 h-5 text-gray-400"/>
                              )}
@@ -295,7 +297,7 @@ export default function StoreDetailPage() {
                              <Star size={14} fill="currentColor"/>
                              <span className="text-gray-900 font-bold text-sm">{r.rating}</span>
                           </div>
-                          {r.dishName && (
+                          {r.dishName && r.dishName !== "General Review" && (
                             <span className="text-[10px] uppercase font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
                               {r.dishName}
                             </span>
@@ -303,6 +305,13 @@ export default function StoreDetailPage() {
                        </div>
                     </div>
                     <p className="text-gray-600 text-sm leading-relaxed mt-2">{r.comment}</p>
+                    
+                    {/* Review Image Display */}
+                    {r.imageUrl && (
+                      <div className="mt-3 relative h-40 w-full sm:w-64 rounded-lg overflow-hidden border border-gray-100 bg-gray-50">
+                        <Image src={r.imageUrl} alt="Review food" fill className="object-cover" />
+                      </div>
+                    )}
                   </div>
                 ))}
                 
@@ -404,19 +413,14 @@ export default function StoreDetailPage() {
       </div>
 
       {/* Dish Review Modal */}
-      {/* LOGIC: 
-        1. isOpen: true if reviewDish (string) is not null.
-        2. restaurantId: store.id
-        3. defaultDishName: the value of reviewDish (e.g. "Chicken Adobo")
-      */}
       {store && (
         <DishReviewModal 
-          isOpen={!!reviewDish} 
-          onClose={() => setReviewDish(null)}
-          restaurantId={store.id} 
+          isOpen={reviewDishName !== null} // Open if string is set
+          onClose={() => setReviewDishName(null)}
+          restaurantId={store.id} // Uses Real ID from DB, not Slug
           currentUser={user}
-          defaultDishName={reviewDish || ""}
-          onReviewSuccess={fetchData}
+          defaultDishName={reviewDishName || ""}
+          onReviewSuccess={fetchData} // Refreshes data after submit
         />
       )}
     </div>
