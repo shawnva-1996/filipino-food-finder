@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -8,33 +8,37 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
     if (loading) return;
 
-    // Define routes
-    const publicRoutes = ["/", "/map"]; 
+    // 1. Define Routes
+    // STRICT: Only Home is public. Everything else requires login.
+    const publicRoutes = ["/"]; 
+    
+    // Auth routes (only accessible if NOT logged in)
     const authRoutes = ["/login", "/register", "/forgot-password"];
     
-    // Dynamic public routes (starts with /store)
-    const isPublic = publicRoutes.includes(pathname) || pathname.startsWith("/store");
+    const isPublic = publicRoutes.includes(pathname);
     const isAuthRoute = authRoutes.includes(pathname);
 
-    // 1. Logged In User trying to access Auth pages -> Redirect to Home
+    // 2. Logic
     if (user && isAuthRoute) {
+      // If logged in, kick out of Login/Register pages -> redirect to Home
       router.replace("/");
-      return;
-    }
-
-    // 2. Guest User trying to access Protected pages -> Redirect to Login
-    if (!user && !isPublic && !isAuthRoute) {
+    } else if (!user && !isPublic && !isAuthRoute) {
+      // If guest, kick out of ANY protected page -> redirect to Login
       router.replace("/login");
-      return;
+    } else {
+      // Allow access
+      setIsChecking(false);
     }
 
   }, [user, loading, pathname, router]);
 
-  if (loading) {
+  // Show loading spinner while AuthContext loads or while we check routes
+  if (loading || isChecking) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-gray-50">
         <div className="animate-pulse text-orange-600 font-bold">Loading...</div>

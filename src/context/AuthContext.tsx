@@ -1,10 +1,14 @@
-// src/context/AuthContext.tsx
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { 
-  GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User,
-  signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  User,
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getUserProfile, UserProfile } from "@/lib/db";
@@ -18,6 +22,8 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   loginGoogle: () => Promise<void>;
+  login: (email: string, pass: string) => Promise<any>;
+  signup: (email: string, pass: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -36,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currentUser);
       if (currentUser) {
         setIsAdmin(currentUser.email === ADMIN_EMAIL);
+        // Fetch profile from DB
         const userProfile = await getUserProfile(currentUser.uid);
         setProfile(userProfile);
       } else {
@@ -59,14 +66,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithPopup(auth, provider);
   };
 
+  // Added Email/Password Login
+  const login = async (email: string, pass: string) => {
+    return signInWithEmailAndPassword(auth, email, pass);
+  };
+
+  // Added Email/Password Signup
+  const signup = async (email: string, pass: string) => {
+    return createUserWithEmailAndPassword(auth, email, pass);
+  };
+
   const logout = async () => {
     await signOut(auth);
     router.push("/");
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, loginGoogle, logout, refreshProfile }}>
-      {!loading && children}
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, loginGoogle, login, signup, logout, refreshProfile }}>
+      {/* We render children even while loading so AuthGuard can handle the loading UI */}
+      {children}
     </AuthContext.Provider>
   );
 }
