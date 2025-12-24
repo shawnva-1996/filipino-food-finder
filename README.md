@@ -50,6 +50,17 @@ when users pay, they should pay to filipino food finder first, filipino food fin
 # bugs
 instead of http://localhost:3000/store/riDvIe6ymmT5tQLKByZC, it should be http://localhost:3000/store/Good-Bites (the last part should be the store name, not the store ID)
 
+when doing this: Submit with 5 stars, comment "Great food", and Upload an Image, Image was not visible 
+
+[ ] Rate Restaurant (General): Click "Write a Review" (top of reviews section). Button did not work
+
+when i am not logged in, i should be unable to access anything except homepage, register, and login.
+
+if i am logged in, i should not be able to accress login and register
+
+
+
+
 # prompt
 use tailwind v4 (no tailwind.config.ts file)
 
